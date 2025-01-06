@@ -1,3 +1,25 @@
+/**
+ * Copyright (c) 2025 Phumsith Insakul. All rights reserved.
+ *
+ * This code is part of the Dynamic XML Tree Editor application.
+ *
+ * Author: Phumsith Insakul
+ * Email: phumparfait@gmail.com
+ *
+ * Description:
+ * This program allows users to interact with and edit XML structures dynamically.
+ * Features include saving, undoing, and redoing changes, as well as adding, deleting, and duplicating fields.
+ *
+ * License: MIT License
+ */
+
+
+/**
+ * Reload ให้ไม่รีเซ็ตทั้งหน้า Tree (reloadTree)
+ * Redo ต้องมี Save State ไหม (redo)
+ * buildTreeFromXML ส่งผลให้มี field ซ้อนกัน แต่ไม่ส่งผลกระทบต่อไฟล์หลัง Save (DuplicateNode)
+ */
+
 import org.w3c.dom.*;
 import org.xml.sax.InputSource;
 
@@ -11,6 +33,9 @@ import java.awt.*;
 import java.io.File;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Stack;
 
 public class DynamicXMLTreeEditor {
@@ -63,28 +88,62 @@ public class DynamicXMLTreeEditor {
         JButton deleteFieldButton = new JButton("Delete Field");
         JButton undoButton = new JButton("Undo");
         JButton redoButton = new JButton("Redo");
-
+        JButton duplicateFieldButton = new JButton("Duplicate Field");
+        //JButton listFieldsButton = new JButton("List Allowed Fields");
 
         // Adding components to the editor panel
-        gbc.gridx = 0; gbc.gridy = 0; fieldPanel.add(fieldNameLabel, gbc);
-        gbc.gridx = 1; gbc.gridy = 0; fieldPanel.add(fieldNameField, gbc);
-        gbc.gridx = 0; gbc.gridy = 1; fieldPanel.add(valueLabel, gbc);
-        gbc.gridx = 1; gbc.gridy = 1; fieldPanel.add(valueField, gbc);
-        gbc.gridx = 0; gbc.gridy = 2; fieldPanel.add(typeLabel, gbc);
-        gbc.gridx = 1; gbc.gridy = 2; fieldPanel.add(typeComboBox, gbc);
-        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; fieldPanel.add(saveValueButton, gbc);
-        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; fieldPanel.add(addSubfieldButton, gbc);
-        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2; fieldPanel.add(deleteFieldButton, gbc);
-        gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 2; fieldPanel.add(undoButton, gbc);
-        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2; fieldPanel.add(redoButton, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        fieldPanel.add(fieldNameLabel, gbc);
+        gbc.gridx = 1;
+        gbc.gridy = 0;
+        fieldPanel.add(fieldNameField, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        fieldPanel.add(valueLabel, gbc);
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        fieldPanel.add(valueField, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        fieldPanel.add(typeLabel, gbc);
+        gbc.gridx = 1;
+        gbc.gridy = 2;
+        fieldPanel.add(typeComboBox, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        gbc.gridwidth = 2;
+        fieldPanel.add(saveValueButton, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 4;
+        gbc.gridwidth = 2;
+        fieldPanel.add(addSubfieldButton, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 5;
+        gbc.gridwidth = 2;
+        fieldPanel.add(deleteFieldButton, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 6;
+        gbc.gridwidth = 2;
+        fieldPanel.add(undoButton, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 7;
+        gbc.gridwidth = 2;
+        fieldPanel.add(redoButton, gbc);
+        gbc.gridx = 0;
+        gbc.gridy = 8;
+        gbc.gridwidth = 2;
+        fieldPanel.add(duplicateFieldButton, gbc);
+        //gbc.gridx = 0;
+        // gbc.gridy = 9;
+        // gbc.gridwidth = 2;
+        // fieldPanel.add(listFieldsButton, gbc);
 
         editorPanel.add(fieldPanel, BorderLayout.NORTH);
 
         // Buttons for file operations
         JButton loadXMLButton = new JButton("Load XML");
         JButton saveFileButton = new JButton("Save File");
-        JButton duplicateFieldButton = new JButton("Duplicate Field");
-        gbc.gridx = 0; gbc.gridy = 8; gbc.gridwidth = 2; fieldPanel.add(duplicateFieldButton, gbc);
 
         //bottomPanel.add(convertWSDLButton);
         bottomPanel.add(loadXMLButton);
@@ -151,12 +210,16 @@ public class DynamicXMLTreeEditor {
         });
         undoButton.addActionListener(e -> undo());
         redoButton.addActionListener(e -> redo());
-        loadXMLButton.addActionListener(e -> loadXMLFile(frame, root));
-        saveFileButton.addActionListener(e -> saveXMLFile(frame));
         duplicateFieldButton.addActionListener(e -> {
             saveStateToUndoStack();
             duplicateNode();
         });
+
+        loadXMLButton.addActionListener(e -> {
+            loadXMLFile(frame, root);
+            listDuplicateAllowedFields();
+        });
+        saveFileButton.addActionListener(e -> saveXMLFile(frame));
 
     }
 
@@ -374,8 +437,165 @@ public class DynamicXMLTreeEditor {
         }
     }
 
+    private static final Set<String> duplicateAllowedFields = new HashSet<>(Arrays.asList(
+            "LetterOfGuaranteeAssetDetail",
+            "NotGenerate",
+            "ExistingGuaranteeCollateralDetails",
+            "needPaymentForAccruedInterestAmount",
+            "isCustWillReqForDrawdownAfterCreditLineDecrease",
+            "AuthorizedPersonToSignContract",
+            "Exe1VerifiedCorrect",
+            "LeaseholdAssetDetail",
+            "DocumentProperty",
+            "SecurityDetail",
+            "StepRate",
+            "JointVentureOrConsortiumProfiles",
+            "PersonalOrJuristicProfiles",
+            "FeePaymentMethod",
+            "TFCCustomerNum",
+            "DGENSupport",
+            "MortgageRank",
+            "LegalActivityDetail",
+            "feeContractReference",
+            "CreditLineAccountInfo",
+            "StockAssetDetail",
+            "ShipAssetDetail",
+            "OwnerAuthPersonToPerformLegalActDetail",
+            "CodeNameMappings",
+            "LeaseholdAssetSubDetails",
+            "CarAssetDetail",
+            "ExistingGuaranteeContractDetails",
+            "BillExchangeAssetDetail",
+            "ExistingLegalActType",
+            "CustomerNameAndGUID",
+            "TemplateRefValue",
+            "InstallmentEveryMonth",
+            "CommoditiesAssetDetail",
+            "Locations",
+            "PackageFinanceDetails",
+            "AddExternalError",
+            "Sequence",
+            "TemplateKeyGUID",
+            "TemplateDetail",
+            "GoldAssetDetail",
+            "BillingScheduleTypes",
+            "ALSCustomerNum",
+            "CondominiumAssetDetail",
+            "TemplateSubLevel",
+            "TransferTo",
+            "BillInfos",
+            "isSME",
+            "needPaymentForAccruedInterest",
+            "Covenants",
+            "RightOnBenefitAssetDetail",
+            "CommercialCollateralContractDetail",
+            "authorizedPersonToPerformLegalAct",
+            "AuthorizedPerson",
+            "ISupplyInfo",
+            "PNDuePayments",
+            "CollateralDetail",
+            "CustIdentification",
+            "LeasingAssetDetail",
+            "OtherFeeInfo",
+            "PaymentStep",
+            "FeeInfo",
+            "BondAssetDetail",
+            "RemarkForAdditionalDocument",
+            "InterestODInfo",
+            "MachineAssetDetail",
+            "LinkageNoInCase",
+            "ProjectNameSoftLoans",
+            "RightDebtors",
+            "RepaymentTransactionInfos",
+            "ExistingLegalActivity",
+            "specialLoans",
+            "FeeListDetail",
+            "TransactionDetail",
+            "IsNonstandardContract",
+            "LandBuildingAssetDetail",
+            "AccountInfo",
+            "SpecificDebtInContract",
+            "InterestRateValueAsOfDates",
+            "SplitOfShareCertificateDetail",
+            "SpecialLoanTypes",
+            "PeriodInstallment",
+            "MachineRegistrationNos",
+            "ProcessAgentInfos",
+            "CreditLineFees",
+            "PensionAssetDetail",
+            "GuaranteeGroupDetail",
+            "Date",
+            "GuaranteeExistingContract",
+            "DisbursementInfo",
+            "ApplicationDetail",
+            "GuaranteeDetail",
+            "KeeperDetails",
+            "IsProcessIncreaseAndExtendCreditLine",
+            "Paragraphs",
+            "ContractLanguage"
+            ));
+
+
+//    private static void duplicateNode() {
+//        if (selectedNode != null && selectedNode.getUserObject() instanceof Element) {
+//            Element selectedElement = (Element) selectedNode.getUserObject();
+//
+//            // ตรวจสอบว่าโหนดที่เลือกมีโหนดแม่ (Parent Node)
+//            Node parentNode = selectedElement.getParentNode();
+//            if (parentNode == null || !(parentNode instanceof Element)) {
+//                JOptionPane.showMessageDialog(null, "The selected node cannot be duplicated.");
+//                return;
+//            }
+//
+//            // ตรวจสอบว่ามีคอมเมนต์ <!--Zero or more repetitions:--> หรือไม่
+//            Node previousSibling = selectedElement.getPreviousSibling();
+//            boolean hasZeroOrMoreRepetitions = false;
+//            while (previousSibling != null) {
+//                if (previousSibling.getNodeType() == Node.COMMENT_NODE &&
+//                        previousSibling.getNodeValue().contains("Zero or more repetitions:")) {
+//                    hasZeroOrMoreRepetitions = true;
+//                    break;
+//                }
+//                previousSibling = previousSibling.getPreviousSibling();
+//            }
+//
+//            if (!hasZeroOrMoreRepetitions) {
+//                JOptionPane.showMessageDialog(null, "This node cannot be duplicated because it is not unbounded.");
+//                return;
+//            }
+//
+//            // คัดลอกโหนด
+//            Element duplicateElement = (Element) selectedElement.cloneNode(true);
+//
+//            // เพิ่มโหนดใหม่เข้าไปในโหนดแม่
+//            parentNode.appendChild(duplicateElement);
+//
+//            // อัปเดต Tree View (เพิ่มโหนดใหม่)
+//            DefaultMutableTreeNode parentTreeNode = (DefaultMutableTreeNode) selectedNode.getParent();
+//            DefaultMutableTreeNode newTreeNode = new DefaultMutableTreeNode(duplicateElement);
+//
+//            // เพิ่มโหนดใหม่ในระดับเดียวกับโหนดเดิม
+//            parentTreeNode.add(newTreeNode);
+//
+//            // เพิ่มลูกของโหนดใหม่ลงใน Tree View (เฉพาะลูกของโหนด Duplicate)
+////            NodeList childNodes = duplicateElement.getChildNodes();
+////            for (int i = 0; i < childNodes.getLength(); i++) {
+////                if (childNodes.item(i).getNodeType() == Node.ELEMENT_NODE) {
+////                    Element childElement = (Element) childNodes.item(i);
+////                    DefaultMutableTreeNode childTreeNode = new DefaultMutableTreeNode(childElement);
+////                    newTreeNode.add(childTreeNode);
+////                }
+////            }
+//            buildTreeFromXML(duplicateElement, newTreeNode);
+//
+//            // รีเฟรช Tree View
+//            ((DefaultTreeModel) tree.getModel()).reload();
+//        }
+//    }
+
     /**
      * Duplicate Field (Array)
+     * buildTreeFromXML ส่งผลให้มี field ซ้อนกัน แต่ไม่ส่งผลกระทบต่อไฟล์หลัง Save
      */
     private static void duplicateNode() {
         if (selectedNode != null && selectedNode.getUserObject() instanceof Element) {
@@ -388,30 +608,22 @@ public class DynamicXMLTreeEditor {
                 return;
             }
 
-            // ตรวจสอบว่ามีคอมเมนต์ <!--Zero or more repetitions:--> หรือไม่
-            Node previousSibling = selectedElement.getPreviousSibling();
-            boolean hasZeroOrMoreRepetitions = false;
-            while (previousSibling != null) {
-                if (previousSibling.getNodeType() == Node.COMMENT_NODE &&
-                        previousSibling.getNodeValue().contains("Zero or more repetitions:")) {
-                    hasZeroOrMoreRepetitions = true;
-                    break;
-                }
-                previousSibling = previousSibling.getPreviousSibling();
-            }
-
-            if (!hasZeroOrMoreRepetitions) {
-                JOptionPane.showMessageDialog(null, "This node cannot be duplicated because it is not unbounded.");
+            // ตรวจสอบว่า field อยู่ใน whitelist หรือไม่
+            if (!duplicateAllowedFields.contains(selectedElement.getTagName())) {
+                JOptionPane.showMessageDialog(null, "This node cannot be duplicated because it is not allowed.");
                 return;
             }
 
-            // คัดลอกโหนด
+            // คัดลอกโหนด (ทั้งโครงสร้าง)
             Element duplicateElement = (Element) selectedElement.cloneNode(true);
+
+            // ล้างเฉพาะค่าภายในโหนดที่ถูกคัดลอก
+            clearContent(duplicateElement);
 
             // เพิ่มโหนดใหม่เข้าไปในโหนดแม่
             parentNode.appendChild(duplicateElement);
 
-            // อัปเดต tree view
+            // เพิ่มโหนดใหม่ใน Tree View
             DefaultMutableTreeNode parentTreeNode = (DefaultMutableTreeNode) selectedNode.getParent();
             DefaultMutableTreeNode newTreeNode = new DefaultMutableTreeNode(duplicateElement);
             parentTreeNode.add(newTreeNode);
@@ -423,7 +635,78 @@ public class DynamicXMLTreeEditor {
     }
 
 
+    /**
+     * ล้างเฉพาะ Text Content ในโหนดและโหนดย่อย โดยยังคงโครงสร้าง field (ลูก) ไว้
+     *
+     * @param node โหนดที่ต้องการล้างเนื้อหา
+     */
+    private static void clearContent(Element node) {
+        // ลบเฉพาะข้อความ (Text Content) ของโหนดปัจจุบัน
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.TEXT_NODE) {
+                child.setNodeValue(""); // ล้างข้อความใน Text Node
+            } else if (child.getNodeType() == Node.ELEMENT_NODE) {
+                clearContent((Element) child); // เรียกซ้ำสำหรับโหนดย่อย
+            }
+        }
+    }
 
+
+    /**
+     * list duplicatable fields
+     */
+    private static void listDuplicateAllowedFields() {
+        if (xmlDocument == null) {
+            System.out.println("XML Document is not loaded.");
+            return;
+        }
+
+        // ใช้ Set เพื่อเก็บชื่อ field ที่ไม่ซ้ำ
+        Set<String> duplicateAllowedFields = new HashSet<>();
+
+        // เรียกใช้ฟังก์ชันเพื่อค้นหา field
+        Element rootElement = xmlDocument.getDocumentElement();
+        collectFieldsWithZeroOrMoreRepetitions(rootElement, duplicateAllowedFields);
+
+        // แสดงผลในรูปแบบที่พร้อม copy ลง whitelist
+        System.out.println("Copy the following whitelist:");
+        System.out.println("private static final Set<String> duplicateAllowedFields = new HashSet<>(Arrays.asList(");
+        for (String field : duplicateAllowedFields) {
+            System.out.println("    \"" + field + "\",");
+        }
+        System.out.println("));");
+    }
+
+    /**
+     * collect fields with "Zero or more repetitions:"
+     *
+     * @param node
+     * @param duplicateAllowedFields
+     */
+    private static void collectFieldsWithZeroOrMoreRepetitions(Node node, Set<String> duplicateAllowedFields) {
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+
+            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                // ตรวจสอบว่ามีคอมเมนต์ "Zero or more repetitions" ก่อนหน้าโหนดนี้หรือไม่
+                Node prev = child.getPreviousSibling();
+                while (prev != null) {
+                    if (prev.getNodeType() == Node.COMMENT_NODE &&
+                            prev.getNodeValue().contains("Zero or more repetitions:")) {
+                        duplicateAllowedFields.add(child.getNodeName()); // เพิ่ม field ลงใน Set
+                        break;
+                    }
+                    prev = prev.getPreviousSibling();
+                }
+
+                // ค้นหาในโหนดลูกต่อไป
+                collectFieldsWithZeroOrMoreRepetitions(child, duplicateAllowedFields);
+            }
+        }
+    }
 
 
     /**
