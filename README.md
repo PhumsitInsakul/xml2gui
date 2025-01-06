@@ -66,6 +66,7 @@ Root
 - ระบบปฏิบัติการ: Windows, macOS, หรือ Linux  
 
 ---
+© 2025 Phumsith Insakul. All rights reserved.
 
 **หมายเหตุ:** หากพบปัญหาหรือมีข้อเสนอแนะ ติดต่อผ่าน [GitHub Issues](https://github.com/username/DynamicXMLTreeEditor/issues)  
 
@@ -134,6 +135,7 @@ Root
 - Operating System: Windows, macOS, or Linux.  
 
 ---
+© 2025 Phumsith Insakul. All rights reserved.
 
 **Note:** If you encounter issues or have suggestions, contact us through [GitHub Issues](https://github.com/username/DynamicXMLTreeEditor/issues)  
 
