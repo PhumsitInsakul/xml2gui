@@ -15,9 +15,21 @@
 
 
 /**
- * Reload ให้ไม่รีเซ็ตทั้งหน้า Tree (reloadTree)
- * Redo ต้องมี Save State ไหม (redo)
  * buildTreeFromXML ส่งผลให้มี field ซ้อนกัน แต่ไม่ส่งผลกระทบต่อไฟล์หลัง Save (DuplicateNode)
+ * ReadyAPI รู้ได้ยังไงว่า field นี้เป็นข้อมูลชนิดอะไร -> (Generate Project ผ่าน WSDL แล้วนำไป map กับชื่อ field ใน outline -> รู้ type ของ field นั้นๆ)
+ * xml ไม่สามารถเก็บ/ระบุ/กำหนด Data type ได้ แต่กำหนดจาก xsd ที่ wsdl ใช้ดึงมา (12 schema)
+ *
+ *
+ * การทำงานของ duplicateNode แต่เดิมจะใช้วิธีหาคำ "Zero or more repetitions:" จากในไฟล์ xml ที่ generate ผ่าน soapUI (ถ้ามี Unbound ที่ field ไหน จะส่งผลให้ไฟล์ xml แจ้ง "Zero or more repetitions:" เหนือ field นั้นๆ)
+ * วิธีการใหม่คือสามารถเข้าไปเช็คในไฟล์เดิมนั้นว่ามี field ไหนที่เข้ากรณีนี้บ้าง (1023 กรณี) จากนั้นแสดงผลทั้งหมดนั้นบน Terminal (ตัด field ซ้ำเรียบร้อย) จากนั้นนำข้อมูลนั้นไปใส่ใน whitelist (manual เท่านั้น)
+ *
+ * "Zero or more repetitions:" เปลี่ยนเป็น Whitelist โดยข้อมูลใน Whitelist กำหนดจากการเรียกใช้ "collectFieldsWithZeroOrMoreRepetitions" ใน "listDuplicateAllowedFields" แล้วแสดงข้อมูลทั้งหมดลง Terminal
+ * จากนั้นสามารถ Copy Arraylist ทั้งหมดนั้นมาใส่ใน duplicateAllowedFields ได้ทันที (Action ตรงนี้ส่งผลให้การ duplicateNode ไม่ต้องหาคำ "Zero or more repetitions" ซ้ำซ้อนในกรณีที่ไฟล์ xml ฉบับจริงไม่มีคำเหล่านั้น
+ * เพราะ generate มาจาก excel (excel -> xml) ไม่ใช่ soapUI (wsdl -> xml))
+ */
+
+/**
+ * รอ OA เพื่อ download; Launch4j มาทำ .jar เป็น .exe
  */
 
 import org.w3c.dom.*;
@@ -42,7 +54,6 @@ public class DynamicXMLTreeEditor {
     private static Document xmlDocument;
     private static JTextField valueField;
     private static JTextField fieldNameField;
-    private static JComboBox<String> typeComboBox;
     private static DefaultMutableTreeNode selectedNode;
     private static JTree tree;
     private static Stack<String> undoStack = new Stack<>();
@@ -75,13 +86,12 @@ public class DynamicXMLTreeEditor {
 
         JLabel fieldNameLabel = new JLabel("Field Name:");
         JLabel valueLabel = new JLabel("Value:");
-        JLabel typeLabel = new JLabel("Type:");
 
         fieldNameField = new JTextField(20);
         valueField = new JTextField(20);
-        typeComboBox = new JComboBox<>(new String[]{"String", "Integer", "Boolean"});
-
-        //JButton convertWSDLButton = new JButton("Convert WSDL to XML");
+        Font thaiFont = new Font("Tahoma", Font.PLAIN, 12);
+        fieldNameField.setFont(thaiFont);
+        valueField.setFont(thaiFont);
 
         JButton saveValueButton = new JButton("Save");
         JButton addSubfieldButton = new JButton("Add Subfield");
@@ -89,7 +99,6 @@ public class DynamicXMLTreeEditor {
         JButton undoButton = new JButton("Undo");
         JButton redoButton = new JButton("Redo");
         JButton duplicateFieldButton = new JButton("Duplicate Field");
-        //JButton listFieldsButton = new JButton("List Allowed Fields");
 
         // Adding components to the editor panel
         gbc.gridx = 0;
@@ -106,38 +115,28 @@ public class DynamicXMLTreeEditor {
         fieldPanel.add(valueField, gbc);
         gbc.gridx = 0;
         gbc.gridy = 2;
-        fieldPanel.add(typeLabel, gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 2;
-        fieldPanel.add(typeComboBox, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 3;
         gbc.gridwidth = 2;
         fieldPanel.add(saveValueButton, gbc);
         gbc.gridx = 0;
-        gbc.gridy = 4;
+        gbc.gridy = 3;
         gbc.gridwidth = 2;
         fieldPanel.add(addSubfieldButton, gbc);
         gbc.gridx = 0;
-        gbc.gridy = 5;
+        gbc.gridy = 4;
         gbc.gridwidth = 2;
         fieldPanel.add(deleteFieldButton, gbc);
         gbc.gridx = 0;
-        gbc.gridy = 6;
+        gbc.gridy = 5;
         gbc.gridwidth = 2;
         fieldPanel.add(undoButton, gbc);
         gbc.gridx = 0;
-        gbc.gridy = 7;
+        gbc.gridy = 6;
         gbc.gridwidth = 2;
         fieldPanel.add(redoButton, gbc);
         gbc.gridx = 0;
-        gbc.gridy = 8;
+        gbc.gridy = 7;
         gbc.gridwidth = 2;
         fieldPanel.add(duplicateFieldButton, gbc);
-        //gbc.gridx = 0;
-        // gbc.gridy = 9;
-        // gbc.gridwidth = 2;
-        // fieldPanel.add(listFieldsButton, gbc);
 
         editorPanel.add(fieldPanel, BorderLayout.NORTH);
 
@@ -156,34 +155,6 @@ public class DynamicXMLTreeEditor {
         frame.getContentPane().add(bottomPanel, BorderLayout.SOUTH);
         frame.setVisible(true);
 
-        // Add action listener for the button
-//        convertWSDLButton.addActionListener(e -> {
-//            JFileChooser fileChooser = new JFileChooser();
-//            int result = fileChooser.showOpenDialog(frame);
-//            if (result == JFileChooser.APPROVE_OPTION) {
-//                File file = fileChooser.getSelectedFile();
-//                String wsdlPath = file.getAbsolutePath();
-//                String xmlOutput = convertWSDLToXML(wsdlPath);
-//
-//                if (xmlOutput != null) {
-//                    JOptionPane.showMessageDialog(frame, "WSDL converted to XML successfully!");
-//                    try {
-//                        DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-//                        xmlDocument = builder.parse(new InputSource(new StringReader(xmlOutput)));
-//
-//                        //DefaultMutableTreeNode root = new DefaultMutableTreeNode("XML");
-//                        buildTreeFromXML(xmlDocument.getDocumentElement(), root);
-//                        ((DefaultTreeModel) tree.getModel()).setRoot(root);
-//                        ((DefaultTreeModel) tree.getModel()).reload();
-//                    } catch (Exception ex) {
-//                        JOptionPane.showMessageDialog(frame, "Error parsing generated XML: " + ex.getMessage());
-//                    }
-//                } else {
-//                    JOptionPane.showMessageDialog(frame, "Failed to convert WSDL to XML.");
-//                }
-//            }
-//        });
-
         // Tree Selection Listener
         tree.addTreeSelectionListener(e -> {
             selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
@@ -191,7 +162,6 @@ public class DynamicXMLTreeEditor {
                 Element element = (Element) selectedNode.getUserObject();
                 fieldNameField.setText(element.getTagName());
                 valueField.setText(element.getTextContent());
-                //typeComboBox.setSelectedItem("String"); // Default type
             }
         });
 
@@ -216,7 +186,7 @@ public class DynamicXMLTreeEditor {
         });
 
         loadXMLButton.addActionListener(e -> {
-            loadXMLFile(frame, root);
+            loadXMLFile(frame);
             listDuplicateAllowedFields();
         });
         saveFileButton.addActionListener(e -> saveXMLFile(frame));
@@ -247,14 +217,6 @@ public class DynamicXMLTreeEditor {
         transformer.transform(new DOMSource(xmlDocument), result);
         return result.getWriter().toString();
     }
-//    private static String convertXMLToString(Document doc) throws Exception {
-//        Transformer transformer = TransformerFactory.newInstance().newTransformer();
-//        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-//        StreamResult result = new StreamResult(new StringWriter());
-//        transformer.transform(new DOMSource(doc), result);
-//        return result.getWriter().toString();
-//    }
-
 
     /**
      * Revert to previous state
@@ -263,7 +225,6 @@ public class DynamicXMLTreeEditor {
         if (!undoStack.isEmpty()) {
             try {
                 redoStack.push(convertXMLToString());
-                //redoStack.push(convertXMLToString(xmlDocument));
 
                 String previousState = undoStack.pop();
                 xmlDocument = convertStringToXML(previousState);
@@ -281,7 +242,6 @@ public class DynamicXMLTreeEditor {
         if (!redoStack.isEmpty()) {
             try {
                 undoStack.push(convertXMLToString());
-                //undoStack.push(convertXMLToString(xmlDocument));
 
                 String nextState = redoStack.pop();
                 xmlDocument = convertStringToXML(nextState);
@@ -313,12 +273,28 @@ public class DynamicXMLTreeEditor {
     }
 
     /**
+     * reset state กรณี loadXMLFile รอบสอง
+     */
+    private static void resetState() {
+        // ล้าง Undo/Redo Stack
+        undoStack.clear();
+        redoStack.clear();
+
+        // ล้าง Tree
+        DefaultMutableTreeNode root = new DefaultMutableTreeNode("XML");
+        ((DefaultTreeModel) tree.getModel()).setRoot(root);
+
+        // ล้างข้อมูลใน Field
+        fieldNameField.setText("");
+        valueField.setText("");
+    }
+
+    /**
      * load file from xml file (input)
      *
      * @param frame
-     * @param root
      */
-    private static void loadXMLFile(JFrame frame, DefaultMutableTreeNode root) {
+    private static void loadXMLFile(JFrame frame) {
         JFileChooser fileChooser = new JFileChooser();
         int result = fileChooser.showOpenDialog(frame);
         if (result == JFileChooser.APPROVE_OPTION) {
@@ -326,12 +302,16 @@ public class DynamicXMLTreeEditor {
             try {
                 DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
                 DocumentBuilder builder = factory.newDocumentBuilder();
+
+                // Reset ก่อนโหลดใหม่
+                resetState();
+
                 xmlDocument = builder.parse(file);
                 xmlDocument.getDocumentElement().normalize();
 
-                root.removeAllChildren();
+                DefaultMutableTreeNode root = new DefaultMutableTreeNode("XML");
                 buildTreeFromXML(xmlDocument.getDocumentElement(), root);
-                ((DefaultTreeModel) tree.getModel()).reload();
+                ((DefaultTreeModel) tree.getModel()).setRoot(root);
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(frame, "Failed to load XML file: " + ex.getMessage());
             }
@@ -368,19 +348,6 @@ public class DynamicXMLTreeEditor {
         }
     }
 
-//    private static void addSubfield() {
-//        if (selectedNode != null && selectedNode.getUserObject() instanceof Element) {
-//            Element parentElement = (Element) selectedNode.getUserObject();
-//            Element newElement = xmlDocument.createElement(fieldNameField.getText());
-//            newElement.setTextContent(valueField.getText());
-//            parentElement.appendChild(newElement);
-//
-//            DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(newElement);
-//            selectedNode.add(newNode);
-//            ((DefaultTreeModel) tree.getModel()).reload();
-//        }
-//    }
-
     /**
      *
      *add sub field
@@ -392,13 +359,18 @@ public class DynamicXMLTreeEditor {
                 JOptionPane.showMessageDialog(null, "Field name cannot be empty!");
                 return;
             }
+
+            // สร้าง Subfield ใหม่ใน XML Document
             Element newElement = xmlDocument.createElement(fieldNameField.getText());
             newElement.setTextContent(valueField.getText());
             parentElement.appendChild(newElement);
 
+            // เพิ่ม Subfield ใหม่ใน Tree View
             DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(newElement);
-            selectedNode.add(newNode);
-            ((DefaultTreeModel) tree.getModel()).reload();
+            ((DefaultTreeModel) tree.getModel()).insertNodeInto(newNode, selectedNode, selectedNode.getChildCount());
+
+            // อัปเดต Tree View
+            updateTreeView(newNode);
         }
     }
 
@@ -407,9 +379,19 @@ public class DynamicXMLTreeEditor {
      */
     private static void deleteField() {
         if (selectedNode != null && selectedNode.getParent() != null) {
-            DefaultMutableTreeNode parent = (DefaultMutableTreeNode) selectedNode.getParent();
-            parent.remove(selectedNode);
-            ((DefaultTreeModel) tree.getModel()).reload();
+            // ลบโหนดใน XML Document
+            Element selectedElement = (Element) selectedNode.getUserObject();
+            Node parentElement = selectedElement.getParentNode();
+            if (parentElement != null) {
+                parentElement.removeChild(selectedElement);
+            }
+
+            // ลบโหนดใน Tree View
+            DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) selectedNode.getParent();
+            ((DefaultTreeModel) tree.getModel()).removeNodeFromParent(selectedNode);
+
+            // อัปเดต Tree View
+            updateTreeView(parentNode);
         }
     }
 
@@ -535,64 +517,6 @@ public class DynamicXMLTreeEditor {
             "ContractLanguage"
             ));
 
-
-//    private static void duplicateNode() {
-//        if (selectedNode != null && selectedNode.getUserObject() instanceof Element) {
-//            Element selectedElement = (Element) selectedNode.getUserObject();
-//
-//            // ตรวจสอบว่าโหนดที่เลือกมีโหนดแม่ (Parent Node)
-//            Node parentNode = selectedElement.getParentNode();
-//            if (parentNode == null || !(parentNode instanceof Element)) {
-//                JOptionPane.showMessageDialog(null, "The selected node cannot be duplicated.");
-//                return;
-//            }
-//
-//            // ตรวจสอบว่ามีคอมเมนต์ <!--Zero or more repetitions:--> หรือไม่
-//            Node previousSibling = selectedElement.getPreviousSibling();
-//            boolean hasZeroOrMoreRepetitions = false;
-//            while (previousSibling != null) {
-//                if (previousSibling.getNodeType() == Node.COMMENT_NODE &&
-//                        previousSibling.getNodeValue().contains("Zero or more repetitions:")) {
-//                    hasZeroOrMoreRepetitions = true;
-//                    break;
-//                }
-//                previousSibling = previousSibling.getPreviousSibling();
-//            }
-//
-//            if (!hasZeroOrMoreRepetitions) {
-//                JOptionPane.showMessageDialog(null, "This node cannot be duplicated because it is not unbounded.");
-//                return;
-//            }
-//
-//            // คัดลอกโหนด
-//            Element duplicateElement = (Element) selectedElement.cloneNode(true);
-//
-//            // เพิ่มโหนดใหม่เข้าไปในโหนดแม่
-//            parentNode.appendChild(duplicateElement);
-//
-//            // อัปเดต Tree View (เพิ่มโหนดใหม่)
-//            DefaultMutableTreeNode parentTreeNode = (DefaultMutableTreeNode) selectedNode.getParent();
-//            DefaultMutableTreeNode newTreeNode = new DefaultMutableTreeNode(duplicateElement);
-//
-//            // เพิ่มโหนดใหม่ในระดับเดียวกับโหนดเดิม
-//            parentTreeNode.add(newTreeNode);
-//
-//            // เพิ่มลูกของโหนดใหม่ลงใน Tree View (เฉพาะลูกของโหนด Duplicate)
-////            NodeList childNodes = duplicateElement.getChildNodes();
-////            for (int i = 0; i < childNodes.getLength(); i++) {
-////                if (childNodes.item(i).getNodeType() == Node.ELEMENT_NODE) {
-////                    Element childElement = (Element) childNodes.item(i);
-////                    DefaultMutableTreeNode childTreeNode = new DefaultMutableTreeNode(childElement);
-////                    newTreeNode.add(childTreeNode);
-////                }
-////            }
-//            buildTreeFromXML(duplicateElement, newTreeNode);
-//
-//            // รีเฟรช Tree View
-//            ((DefaultTreeModel) tree.getModel()).reload();
-//        }
-//    }
-
     /**
      * Duplicate Field (Array)
      * buildTreeFromXML ส่งผลให้มี field ซ้อนกัน แต่ไม่ส่งผลกระทบต่อไฟล์หลัง Save
@@ -614,26 +538,39 @@ public class DynamicXMLTreeEditor {
                 return;
             }
 
-            // คัดลอกโหนด (ทั้งโครงสร้าง)
+            // คัดลอกโหนดใน XML Document
             Element duplicateElement = (Element) selectedElement.cloneNode(true);
 
-            // ล้างเฉพาะค่าภายในโหนดที่ถูกคัดลอก
+            // ล้างค่าภายในโหนดที่ Duplicate
             clearContent(duplicateElement);
 
-            // เพิ่มโหนดใหม่เข้าไปในโหนดแม่
-            parentNode.appendChild(duplicateElement);
+            // เพิ่มโหนดใหม่เข้าไปในโหนดแม่ใน XML Document
+            ((Element) parentNode).appendChild(duplicateElement);
 
             // เพิ่มโหนดใหม่ใน Tree View
             DefaultMutableTreeNode parentTreeNode = (DefaultMutableTreeNode) selectedNode.getParent();
             DefaultMutableTreeNode newTreeNode = new DefaultMutableTreeNode(duplicateElement);
             parentTreeNode.add(newTreeNode);
+
+            // สร้างโหนดย่อย (Child Nodes) ใน Tree View
             buildTreeFromXML(duplicateElement, newTreeNode);
 
-            // รีเฟรช Tree View
+            // อัปเดต Tree View
             ((DefaultTreeModel) tree.getModel()).reload();
+            updateTreeView(newTreeNode);
         }
     }
 
+    /**
+     * ฟังก์ชันสำหรับอัปเดต Tree View เฉพาะจุด
+     *
+     * @param node โหนดที่ต้องการอัปเดต
+     */
+    private static void updateTreeView(DefaultMutableTreeNode node) {
+        TreePath path = new TreePath(node.getPath());
+        tree.expandPath(path);
+        tree.scrollPathToVisible(path);
+    }
 
     /**
      * ล้างเฉพาะ Text Content ในโหนดและโหนดย่อย โดยยังคงโครงสร้าง field (ลูก) ไว้
@@ -707,61 +644,4 @@ public class DynamicXMLTreeEditor {
             }
         }
     }
-
-
-    /**
-     * Convert WSDL to XML
-     *
-     * @param wsdlURL The URL or path of the WSDL file
-     * @return XML document as a string
-     */
-//    private static String convertWSDLToXML(String wsdlURL) {
-//        try {
-//            // Create a DocumentBuilder to parse WSDL
-//            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-//            DocumentBuilder builder = factory.newDocumentBuilder();
-//
-//            // Parse the WSDL file
-//            Document wsdlDocument = builder.parse(wsdlURL);
-//
-//            // Extract the relevant elements (e.g., operations, messages, etc.)
-//            Element root = wsdlDocument.getDocumentElement();
-//
-//            // Create a new XML Document for the output
-//            Document outputDocument = builder.newDocument();
-//            Element outputRoot = outputDocument.createElement("WSDLContent");
-//            outputDocument.appendChild(outputRoot);
-//
-//            // Recursively copy WSDL content into the new XML document
-//            copyWSDLToXML(root, outputRoot, outputDocument);
-//
-//            // Convert the resulting XML document to a String
-//            return convertXMLToString(outputDocument);
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            return null;
-//        }
-//    }
-
-    /**
-     * Recursively copy WSDL elements into an XML structure
-     *
-     * @param wsdlNode  The WSDL node
-     * @param xmlParent The parent node in the XML document
-     * @param xmlDoc    The XML document
-     */
-//    private static void copyWSDLToXML(Node wsdlNode, Element xmlParent, Document xmlDoc) {
-//        NodeList children = wsdlNode.getChildNodes();
-//        for (int i = 0; i < children.getLength(); i++) {
-//            Node child = children.item(i);
-//            if (child.getNodeType() == Node.ELEMENT_NODE) {
-//                Element childElement = xmlDoc.createElement(child.getNodeName());
-//                if (child.getTextContent() != null && !child.getTextContent().trim().isEmpty()) {
-//                    childElement.setTextContent(child.getTextContent().trim());
-//                }
-//                xmlParent.appendChild(childElement);
-//                copyWSDLToXML(child, childElement, xmlDoc); // Recursively process child nodes
-//            }
-//        }
-//    }
 }
