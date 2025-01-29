@@ -15,27 +15,39 @@
 
 
 /**
- * buildTreeFromXML ส่งผลให้มี field ซ้อนกัน แต่ไม่ส่งผลกระทบต่อไฟล์หลัง Save (DuplicateNode)
- * ReadyAPI รู้ได้ยังไงว่า field นี้เป็นข้อมูลชนิดอะไร -> (Generate Project ผ่าน WSDL แล้วนำไป map กับชื่อ field ใน outline -> รู้ type ของ field นั้นๆ)
- * xml ไม่สามารถเก็บ/ระบุ/กำหนด Data type ได้ แต่กำหนดจาก xsd ที่ wsdl ใช้ดึงมา (12 schema)
+ * การทำงานของ "buildTreeFromXML" และกระบวนการ Duplicate Node
  *
+ * - "buildTreeFromXML" ส่งผลให้เกิด field ซ้อนกัน (DuplicateNode) แต่จะไม่ส่งผลกระทบต่อไฟล์ XML หลังจาก Save
  *
- * การทำงานของ duplicateNode แต่เดิมจะใช้วิธีหาคำ "Zero or more repetitions:" จากในไฟล์ xml ที่ generate ผ่าน soapUI (ถ้ามี Unbound ที่ field ไหน จะส่งผลให้ไฟล์ xml แจ้ง "Zero or more repetitions:" เหนือ field นั้นๆ)
- * วิธีการใหม่คือสามารถเข้าไปเช็คในไฟล์เดิมนั้นว่ามี field ไหนที่เข้ากรณีนี้บ้าง (1023 กรณี) จากนั้นแสดงผลทั้งหมดนั้นบน Terminal (ตัด field ซ้ำเรียบร้อย) จากนั้นนำข้อมูลนั้นไปใส่ใน whitelist (manual เท่านั้น)
+ * - การระบุชนิดข้อมูลของ Field ใน ReadyAPI:
+ *   1. ReadyAPI รู้ชนิดข้อมูล (Data Type) ของ Field โดยอ้างอิงจากการ Generate Project ผ่าน WSDL
+ *   2. ชื่อ Field แต่ละอันจะถูก Map กับ Outline ที่มีการระบุชนิดข้อมูลไว้ล่วงหน้า
+ *   3. ไฟล์ XML ไม่สามารถกำหนด Data Type ได้โดยตรง แต่จะอ้างอิงจาก XSD ซึ่ง WSDL ใช้ในการดึงข้อมูลโครงสร้าง (Schema จำนวน 12 ไฟล์)
  *
- * "Zero or more repetitions:" เปลี่ยนเป็น Whitelist โดยข้อมูลใน Whitelist กำหนดจากการเรียกใช้ "collectFieldsWithZeroOrMoreRepetitions" ใน "listDuplicateAllowedFields" แล้วแสดงข้อมูลทั้งหมดลง Terminal
- * จากนั้นสามารถ Copy Arraylist ทั้งหมดนั้นมาใส่ใน duplicateAllowedFields ได้ทันที (Action ตรงนี้ส่งผลให้การ duplicateNode ไม่ต้องหาคำ "Zero or more repetitions" ซ้ำซ้อนในกรณีที่ไฟล์ xml ฉบับจริงไม่มีคำเหล่านั้น
- * เพราะ generate มาจาก excel (excel -> xml) ไม่ใช่ soapUI (wsdl -> xml))
+ * - กระบวนการ Duplicate Node แบบเดิม:
+ *   1. ค้นหาคำว่า "Zero or more repetitions:" ในไฟล์ XML ที่ Generate ผ่าน SoapUI
+ *   2. Field ใดที่มีการกำหนด "Unbound" จะปรากฏข้อความ "Zero or more repetitions:" เหนือ Field นั้น
+ *   3. หากพบ Field เหล่านี้ ระบบจะเพิ่ม Field ซ้ำ (Duplicate) ตามความจำเป็น
+ *
+ * - กระบวนการ Duplicate Node แบบใหม่:
+ *   1. ใช้ฟังก์ชัน "collectFieldsWithZeroOrMoreRepetitions" ใน "listDuplicateAllowedFields"
+ *      เพื่อรวบรวม Field ที่เข้าข่าย "Zero or more repetitions:"
+ *   2. รายการ Field ที่พบทั้งหมดจะแสดงใน Terminal โดยเป็น Field ที่ตัดข้อมูลซ้ำออกแล้ว
+ *   3. จากนั้น Copy รายการ ArrayList ที่ได้ไปใส่ใน "duplicateAllowedFields" (Whitelist) ด้วยตนเอง (Manual)
+ *
+ * - ข้อดีของกระบวนการแบบใหม่:
+ *   1. ไม่ต้องค้นหาคำว่า "Zero or more repetitions:" ใน XML ซ้ำอีก
+ *   2. ลดความซับซ้อนในกรณีที่ไฟล์ XML จริงไม่ได้ Generate มาจาก SoapUI แต่ถูกสร้างจาก Excel
+ *      (เช่น จาก Excel -> XML โดยตรง แทนที่จะเป็น WSDL -> XML)
  */
 
-/**
- * รอ OA เพื่อ download; Launch4j มาทำ .jar เป็น .exe
- */
 
 import org.w3c.dom.*;
 import org.xml.sax.InputSource;
 
 import javax.swing.*;
+import javax.swing.event.TreeExpansionEvent;
+import javax.swing.event.TreeWillExpandListener;
 import javax.swing.tree.*;
 import javax.xml.parsers.*;
 import javax.xml.transform.*;
@@ -43,8 +55,10 @@ import javax.xml.transform.dom.*;
 import javax.xml.transform.stream.*;
 import java.awt.*;
 import java.io.File;
+import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -59,6 +73,28 @@ public class DynamicXMLTreeEditor {
     private static Stack<String> undoStack = new Stack<>();
     private static Stack<String> redoStack = new Stack<>();
 
+    private static final Set<String> duplicateAllowedFields = new HashSet<>(Arrays.asList(
+            "LetterOfGuaranteeAssetDetail", "NotGenerate", "ExistingGuaranteeCollateralDetails", "needPaymentForAccruedInterestAmount", "isCustWillReqForDrawdownAfterCreditLineDecrease",
+            "AuthorizedPersonToSignContract", "Exe1VerifiedCorrect", "LeaseholdAssetDetail", "DocumentProperty", "SecurityDetail",
+            "StepRate", "JointVentureOrConsortiumProfiles", "PersonalOrJuristicProfiles", "FeePaymentMethod", "TFCCustomerNum",
+            "DGENSupport", "MortgageRank", "LegalActivityDetail", "feeContractReference", "CreditLineAccountInfo",
+            "StockAssetDetail", "ShipAssetDetail", "OwnerAuthPersonToPerformLegalActDetail", "CodeNameMappings", "LeaseholdAssetSubDetails",
+            "CarAssetDetail", "ExistingGuaranteeContractDetails", "BillExchangeAssetDetail", "ExistingLegalActType", "CustomerNameAndGUID",
+            "TemplateRefValue", "InstallmentEveryMonth", "CommoditiesAssetDetail", "Locations", "PackageFinanceDetails",
+            "AddExternalError", "Sequence", "TemplateKeyGUID", "TemplateDetail", "GoldAssetDetail",
+            "BillingScheduleTypes", "ALSCustomerNum", "CondominiumAssetDetail", "TemplateSubLevel", "TransferTo",
+            "BillInfos", "isSME", "needPaymentForAccruedInterest", "Covenants", "RightOnBenefitAssetDetail",
+            "CommercialCollateralContractDetail", "authorizedPersonToPerformLegalAct", "AuthorizedPerson", "ISupplyInfo", "PNDuePayments",
+            "CollateralDetail", "CustIdentification", "LeasingAssetDetail", "OtherFeeInfo", "PaymentStep",
+            "FeeInfo", "BondAssetDetail", "RemarkForAdditionalDocument", "InterestODInfo", "MachineAssetDetail",
+            "LinkageNoInCase", "ProjectNameSoftLoans", "RightDebtors", "RepaymentTransactionInfos", "ExistingLegalActivity",
+            "specialLoans", "FeeListDetail", "TransactionDetail", "IsNonstandardContract", "LandBuildingAssetDetail",
+            "AccountInfo", "SpecificDebtInContract", "InterestRateValueAsOfDates", "SplitOfShareCertificateDetail", "SpecialLoanTypes",
+            "PeriodInstallment", "MachineRegistrationNos", "ProcessAgentInfos", "CreditLineFees", "PensionAssetDetail",
+            "GuaranteeGroupDetail", "Date", "GuaranteeExistingContract", "DisbursementInfo", "ApplicationDetail",
+            "GuaranteeDetail", "KeeperDetails", "IsProcessIncreaseAndExtendCreditLine", "Paragraphs", "ContractLanguage"
+    ));
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(DynamicXMLTreeEditor::createAndShowGUI);
     }
@@ -68,18 +104,16 @@ public class DynamicXMLTreeEditor {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(1000, 700);
 
-        // Layout
         JSplitPane splitPane = new JSplitPane();
         JPanel editorPanel = new JPanel(new BorderLayout());
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JPanel fieldPanel = new JPanel(new GridBagLayout());
 
-        // Tree and Scroll Pane
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("XML");
         tree = new JTree(root);
         JScrollPane treeScrollPane = new JScrollPane(tree);
+//        JScrollPane valueScrollPane = new JScrollPane(valueField);
 
-        // Editor Section
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(5, 5, 5, 5);
@@ -100,62 +134,37 @@ public class DynamicXMLTreeEditor {
         JButton redoButton = new JButton("Redo");
         JButton duplicateFieldButton = new JButton("Duplicate Field");
 
-        // Adding components to the editor panel
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        fieldPanel.add(fieldNameLabel, gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 0;
-        fieldPanel.add(fieldNameField, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        fieldPanel.add(valueLabel, gbc);
-        gbc.gridx = 1;
-        gbc.gridy = 1;
-        fieldPanel.add(valueField, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 2;
-        gbc.gridwidth = 2;
-        fieldPanel.add(saveValueButton, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 3;
-        gbc.gridwidth = 2;
-        fieldPanel.add(addSubfieldButton, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 4;
-        gbc.gridwidth = 2;
-        fieldPanel.add(deleteFieldButton, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 5;
-        gbc.gridwidth = 2;
-        fieldPanel.add(undoButton, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 6;
-        gbc.gridwidth = 2;
-        fieldPanel.add(redoButton, gbc);
-        gbc.gridx = 0;
-        gbc.gridy = 7;
-        gbc.gridwidth = 2;
-        fieldPanel.add(duplicateFieldButton, gbc);
+        gbc.gridx = 0; gbc.gridy = 0; fieldPanel.add(fieldNameLabel, gbc);
+        gbc.gridx = 1; gbc.gridy = 0; fieldPanel.add(fieldNameField, gbc);
+        gbc.gridx = 0; gbc.gridy = 1; fieldPanel.add(valueLabel, gbc);
+        gbc.gridx = 1; gbc.gridy = 1; fieldPanel.add(valueField, gbc);
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; fieldPanel.add(saveValueButton, gbc);
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2; fieldPanel.add(addSubfieldButton, gbc);
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; fieldPanel.add(deleteFieldButton, gbc);
+        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2; fieldPanel.add(undoButton, gbc);
+        gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 2; fieldPanel.add(redoButton, gbc);
+        gbc.gridx = 0; gbc.gridy = 7; gbc.gridwidth = 2; fieldPanel.add(duplicateFieldButton, gbc);
+//        fieldPanel.add(valueScrollPane, gbc);
 
         editorPanel.add(fieldPanel, BorderLayout.NORTH);
 
-        // Buttons for file operations
+        JButton xmlMergerButton = new JButton("XML Merger");
         JButton loadXMLButton = new JButton("Load XML");
         JButton saveFileButton = new JButton("Save File");
 
-        //bottomPanel.add(convertWSDLButton);
+        bottomPanel.add(xmlMergerButton);
         bottomPanel.add(loadXMLButton);
         bottomPanel.add(saveFileButton);
 
         splitPane.setLeftComponent(treeScrollPane);
         splitPane.setRightComponent(editorPanel);
+        splitPane.setOrientation(JSplitPane.HORIZONTAL_SPLIT);
+        splitPane.setDividerLocation(500);
 
         frame.getContentPane().add(splitPane, BorderLayout.CENTER);
         frame.getContentPane().add(bottomPanel, BorderLayout.SOUTH);
         frame.setVisible(true);
 
-        // Tree Selection Listener
         tree.addTreeSelectionListener(e -> {
             selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
             if (selectedNode != null && selectedNode.getUserObject() instanceof Element) {
@@ -165,40 +174,61 @@ public class DynamicXMLTreeEditor {
             }
         });
 
-        // Button Actions
-        saveValueButton.addActionListener(e -> {
-            saveStateToUndoStack();
-            saveFieldValue();
-        });
-        addSubfieldButton.addActionListener(e -> {
-            saveStateToUndoStack();
-            addSubfield();
-        });
-        deleteFieldButton.addActionListener(e -> {
-            saveStateToUndoStack();
-            deleteField();
-        });
+        saveValueButton.addActionListener(e -> {saveStateToUndoStack();saveFieldValue();});
+        addSubfieldButton.addActionListener(e -> {saveStateToUndoStack();addSubfield();});
+        deleteFieldButton.addActionListener(e -> {saveStateToUndoStack();deleteField();});
         undoButton.addActionListener(e -> undo());
         redoButton.addActionListener(e -> redo());
-        duplicateFieldButton.addActionListener(e -> {
-            saveStateToUndoStack();
-            duplicateNode();
+        duplicateFieldButton.addActionListener(e -> {saveStateToUndoStack();duplicateNode();});
+
+        xmlMergerButton.addActionListener(e -> {
+            try {
+                File exeFile;
+
+                // 1. ลองหาไฟล์ใน Resource (กรณี XMLMerger.exe อยู่ใน Resource ของ JAR)
+                URL resource = DynamicXMLTreeEditor.class.getResource("/XMLMerger.exe");
+                if (resource != null) {
+                    exeFile = new File(resource.toURI());
+                } else {
+                    // 2. ลองหาไฟล์จากโฟลเดอร์เดียวกับที่รันโปรแกรม
+                    // exeFile = new File("XMLMerger.exe");
+                    exeFile = new File("src/application/XMLMerger.exe");
+                }
+
+                // ตรวจสอบว่าไฟล์มีอยู่จริงหรือไม่
+                if (!exeFile.exists()) {
+                    JOptionPane.showMessageDialog(frame, "Error: XMLMerger.exe not found!",
+                            "File Not Found", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                // Run XMLMerger.exe
+                ProcessBuilder pb = new ProcessBuilder(exeFile.getAbsolutePath());
+                pb.directory(exeFile.getParentFile()); // ตั้งค่า working directory
+                pb.start();
+
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(frame, "Error: Unable to execute XMLMerger.exe",
+                        "Execution Error", JOptionPane.ERROR_MESSAGE);
+                ex.printStackTrace();
+            }
         });
 
-        loadXMLButton.addActionListener(e -> {
-            loadXMLFile(frame);
-            listDuplicateAllowedFields();
-        });
+
+        loadXMLButton.addActionListener(e -> {loadXMLFile(frame);listDuplicateAllowedFields();});
         saveFileButton.addActionListener(e -> saveXMLFile(frame));
-
     }
 
-    // Save XML structure to undo stack
+    /**
+     * Save XML structure to undo stack
+     */
     private static void saveStateToUndoStack() {
         try {
-            undoStack.push(convertXMLToString());
-            //undoStack.push(convertXMLToString(xmlDocument));
-
+            String currentState = convertXMLToString();
+            if (!undoStack.isEmpty() && !currentState.equals(undoStack.peek())) {
+                undoStack.push(currentState);
+                redoStack.clear();
+            }
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -212,7 +242,7 @@ public class DynamicXMLTreeEditor {
      */
     private static String convertXMLToString() throws Exception {
         Transformer transformer = TransformerFactory.newInstance().newTransformer();
-        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+        // transformer.setOutputProperty(OutputKeys.INDENT, "yes");
         StreamResult result = new StreamResult(new StringWriter());
         transformer.transform(new DOMSource(xmlDocument), result);
         return result.getWriter().toString();
@@ -252,7 +282,9 @@ public class DynamicXMLTreeEditor {
         }
     }
 
-    // Reload tree after undo/redo
+    /**
+     * Reload tree after undo/redo
+     */
     private static void reloadTree() {
         DefaultMutableTreeNode root = new DefaultMutableTreeNode("XML");
         buildTreeFromXML(xmlDocument.getDocumentElement(), root);
@@ -273,23 +305,6 @@ public class DynamicXMLTreeEditor {
     }
 
     /**
-     * reset state กรณี loadXMLFile รอบสอง
-     */
-    private static void resetState() {
-        // ล้าง Undo/Redo Stack
-        undoStack.clear();
-        redoStack.clear();
-
-        // ล้าง Tree
-        DefaultMutableTreeNode root = new DefaultMutableTreeNode("XML");
-        ((DefaultTreeModel) tree.getModel()).setRoot(root);
-
-        // ล้างข้อมูลใน Field
-        fieldNameField.setText("");
-        valueField.setText("");
-    }
-
-    /**
      * load file from xml file (input)
      *
      * @param frame
@@ -303,17 +318,21 @@ public class DynamicXMLTreeEditor {
                 DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
                 DocumentBuilder builder = factory.newDocumentBuilder();
 
-                // Reset ก่อนโหลดใหม่
-                resetState();
-
+                // โหลด XML Document
                 xmlDocument = builder.parse(file);
                 xmlDocument.getDocumentElement().normalize();
 
-                DefaultMutableTreeNode root = new DefaultMutableTreeNode("XML");
+                // สร้าง root node ของ Tree
+                DefaultMutableTreeNode root = new DefaultMutableTreeNode(xmlDocument.getDocumentElement());
                 buildTreeFromXML(xmlDocument.getDocumentElement(), root);
-                ((DefaultTreeModel) tree.getModel()).setRoot(root);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(frame, "Failed to load XML file: " + ex.getMessage());
+
+                // ตั้งค่า Tree
+                tree.setModel(new DefaultTreeModel(root));
+                addTreeWillExpandListener(tree);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                JOptionPane.showMessageDialog(frame, "Error loading XML file: " + e.getMessage());
             }
         }
     }
@@ -328,14 +347,81 @@ public class DynamicXMLTreeEditor {
         DefaultMutableTreeNode node = new DefaultMutableTreeNode(element);
         parent.add(node);
 
+        // ตรวจสอบว่ามีลูก (subfield) ที่เป็น Element หรือไม่
         NodeList children = element.getChildNodes();
+        boolean hasElementChild = false;
         for (int i = 0; i < children.getLength(); i++) {
-            Node child = children.item(i);
-            if (child.getNodeType() == Node.ELEMENT_NODE) {
-                buildTreeFromXML((Element) child, node);
+            if (children.item(i).getNodeType() == Node.ELEMENT_NODE) {
+                hasElementChild = true;
+                break;
             }
         }
+
+        // เพิ่ม Placeholder "Loading..." เฉพาะเมื่อมีลูกที่เป็น Element
+        if (hasElementChild) {
+            DefaultMutableTreeNode loadingNode = new DefaultMutableTreeNode("Loading...");
+            node.add(loadingNode);
+        }
     }
+
+    /**
+     * Adds a listener to dynamically load XML child nodes when a tree node is expanded
+     *
+     * @param tree
+     */
+    private static void addTreeWillExpandListener(JTree tree) {
+        tree.addTreeWillExpandListener(new TreeWillExpandListener() {
+            @Override
+            public void treeWillExpand(TreeExpansionEvent event) throws ExpandVetoException {
+                DefaultMutableTreeNode expandingNode = (DefaultMutableTreeNode) event.getPath().getLastPathComponent();
+
+                // ตรวจสอบว่า UserObject เป็น Element
+                if (expandingNode.getUserObject() instanceof Element) {
+                    Element expandingElement = (Element) expandingNode.getUserObject();
+                    NodeList children = expandingElement.getChildNodes();
+
+                    // ลบ Placeholder ("Loading...") และเพิ่มลูกใหม่
+                    if (expandingNode.getChildCount() == 1 && "Loading...".equals(expandingNode.getFirstChild().toString())) {
+                        expandingNode.removeAllChildren(); // ลบ Placeholder
+
+                        for (int i = 0; i < children.getLength(); i++) {
+                            Node child = children.item(i);
+                            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                                buildTreeFromXML((Element) child, expandingNode);
+                            }
+                        }
+                        ((DefaultTreeModel) tree.getModel()).reload(expandingNode);
+                    }
+                } else {
+                    throw new ClassCastException("Tree Node does not contain an Element object");
+                }
+            }
+            @Override
+            public void treeWillCollapse(TreeExpansionEvent event) {
+            }
+        });
+    }
+
+    /**
+     * update node label
+     *
+     * @param node
+     * @param element
+     */
+    private static void updateNodeLabel(DefaultMutableTreeNode node, Element element) {
+        String label = element.getTagName() + " : " + element.getTextContent();
+        node.setUserObject(label);
+    }
+
+    /**
+     * highlight node
+     *
+     * @param node
+     */
+    private static void highlightNode(DefaultMutableTreeNode node) {
+        tree.setSelectionPath(new TreePath(node.getPath()));
+    }
+
 
     /**
      * save field value
@@ -344,12 +430,13 @@ public class DynamicXMLTreeEditor {
         if (selectedNode != null && selectedNode.getUserObject() instanceof Element) {
             Element element = (Element) selectedNode.getUserObject();
             element.setTextContent(valueField.getText());
-            JOptionPane.showMessageDialog(null, "Value saved for: " + element.getTagName());
+            updateNodeLabel(selectedNode, element);
+            ((DefaultTreeModel) tree.getModel()).reload(selectedNode);
+            highlightNode(selectedNode);
         }
     }
 
     /**
-     *
      *add sub field
      */
     private static void addSubfield() {
@@ -397,6 +484,7 @@ public class DynamicXMLTreeEditor {
 
     /**
      * save xml file (output)
+     *
      * @param frame
      */
     private static void saveXMLFile(JFrame frame) {
@@ -407,7 +495,7 @@ public class DynamicXMLTreeEditor {
             try {
                 TransformerFactory transformerFactory = TransformerFactory.newInstance();
                 Transformer transformer = transformerFactory.newTransformer();
-                transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+                // transformer.setOutputProperty(OutputKeys.INDENT, "yes");
                 transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
                 DOMSource source = new DOMSource(xmlDocument);
                 StreamResult streamResult = new StreamResult(file);
@@ -419,107 +507,9 @@ public class DynamicXMLTreeEditor {
         }
     }
 
-    private static final Set<String> duplicateAllowedFields = new HashSet<>(Arrays.asList(
-            "LetterOfGuaranteeAssetDetail",
-            "NotGenerate",
-            "ExistingGuaranteeCollateralDetails",
-            "needPaymentForAccruedInterestAmount",
-            "isCustWillReqForDrawdownAfterCreditLineDecrease",
-            "AuthorizedPersonToSignContract",
-            "Exe1VerifiedCorrect",
-            "LeaseholdAssetDetail",
-            "DocumentProperty",
-            "SecurityDetail",
-            "StepRate",
-            "JointVentureOrConsortiumProfiles",
-            "PersonalOrJuristicProfiles",
-            "FeePaymentMethod",
-            "TFCCustomerNum",
-            "DGENSupport",
-            "MortgageRank",
-            "LegalActivityDetail",
-            "feeContractReference",
-            "CreditLineAccountInfo",
-            "StockAssetDetail",
-            "ShipAssetDetail",
-            "OwnerAuthPersonToPerformLegalActDetail",
-            "CodeNameMappings",
-            "LeaseholdAssetSubDetails",
-            "CarAssetDetail",
-            "ExistingGuaranteeContractDetails",
-            "BillExchangeAssetDetail",
-            "ExistingLegalActType",
-            "CustomerNameAndGUID",
-            "TemplateRefValue",
-            "InstallmentEveryMonth",
-            "CommoditiesAssetDetail",
-            "Locations",
-            "PackageFinanceDetails",
-            "AddExternalError",
-            "Sequence",
-            "TemplateKeyGUID",
-            "TemplateDetail",
-            "GoldAssetDetail",
-            "BillingScheduleTypes",
-            "ALSCustomerNum",
-            "CondominiumAssetDetail",
-            "TemplateSubLevel",
-            "TransferTo",
-            "BillInfos",
-            "isSME",
-            "needPaymentForAccruedInterest",
-            "Covenants",
-            "RightOnBenefitAssetDetail",
-            "CommercialCollateralContractDetail",
-            "authorizedPersonToPerformLegalAct",
-            "AuthorizedPerson",
-            "ISupplyInfo",
-            "PNDuePayments",
-            "CollateralDetail",
-            "CustIdentification",
-            "LeasingAssetDetail",
-            "OtherFeeInfo",
-            "PaymentStep",
-            "FeeInfo",
-            "BondAssetDetail",
-            "RemarkForAdditionalDocument",
-            "InterestODInfo",
-            "MachineAssetDetail",
-            "LinkageNoInCase",
-            "ProjectNameSoftLoans",
-            "RightDebtors",
-            "RepaymentTransactionInfos",
-            "ExistingLegalActivity",
-            "specialLoans",
-            "FeeListDetail",
-            "TransactionDetail",
-            "IsNonstandardContract",
-            "LandBuildingAssetDetail",
-            "AccountInfo",
-            "SpecificDebtInContract",
-            "InterestRateValueAsOfDates",
-            "SplitOfShareCertificateDetail",
-            "SpecialLoanTypes",
-            "PeriodInstallment",
-            "MachineRegistrationNos",
-            "ProcessAgentInfos",
-            "CreditLineFees",
-            "PensionAssetDetail",
-            "GuaranteeGroupDetail",
-            "Date",
-            "GuaranteeExistingContract",
-            "DisbursementInfo",
-            "ApplicationDetail",
-            "GuaranteeDetail",
-            "KeeperDetails",
-            "IsProcessIncreaseAndExtendCreditLine",
-            "Paragraphs",
-            "ContractLanguage"
-            ));
-
     /**
      * Duplicate Field (Array)
-     * buildTreeFromXML ส่งผลให้มี field ซ้อนกัน แต่ไม่ส่งผลกระทบต่อไฟล์หลัง Save
+     * - "buildTreeFromXML" ส่งผลให้เกิด field ซ้อนกัน (DuplicateNode) แต่จะไม่ส่งผลกระทบต่อไฟล์ XML หลังจาก Save
      */
     private static void duplicateNode() {
         if (selectedNode != null && selectedNode.getUserObject() instanceof Element) {
@@ -563,8 +553,9 @@ public class DynamicXMLTreeEditor {
 
     /**
      * ฟังก์ชันสำหรับอัปเดต Tree View เฉพาะจุด
+     * โหนดที่ต้องการอัปเดต
      *
-     * @param node โหนดที่ต้องการอัปเดต
+     * @param node
      */
     private static void updateTreeView(DefaultMutableTreeNode node) {
         TreePath path = new TreePath(node.getPath());
@@ -574,8 +565,9 @@ public class DynamicXMLTreeEditor {
 
     /**
      * ล้างเฉพาะ Text Content ในโหนดและโหนดย่อย โดยยังคงโครงสร้าง field (ลูก) ไว้
+     * โหนดที่ต้องการล้างเนื้อหา
      *
-     * @param node โหนดที่ต้องการล้างเนื้อหา
+     * @param node
      */
     private static void clearContent(Element node) {
         // ลบเฉพาะข้อความ (Text Content) ของโหนดปัจจุบัน
