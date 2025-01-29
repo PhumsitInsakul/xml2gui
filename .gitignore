@@ -27,3 +27,12 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Additional ignores ###
+*.exe
+*.jar
+*.class
+application/
+build/
+dist/
+keep/
