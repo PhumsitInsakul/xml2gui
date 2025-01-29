@@ -36,7 +36,6 @@ javac XMLMerger.java
 java XMLMerger
 ```
 2️⃣ Use via GUI (Refer to line 150 in the code)  
-3️⃣ Run via application file: `src/application/XMLMerger.exe`
 
 ---
 
@@ -113,7 +112,6 @@ javac XMLMerger.java
 java XMLMerger
 ```
 2️⃣ ใช้งานผ่าน GUI (ดูที่บรรทัด 150 ของโค้ด)  
-3️⃣ ใช้งานผ่านไฟล์แอปพลิเคชัน: `src/application/XMLMerger.exe`
 
 ---
 
