@@ -76,7 +76,7 @@ Root
 
 © 2025 **Phumsith Insakul**. All rights reserved.
 
-💬 **Report issues or suggestions:** [GitHub Issues](https://github.com/username/DynamicXMLTreeEditor/issues) 🚀
+💬 **Report issues or suggestions:** [GitHub Issues](https://github.com/PhumsitInsakul/xml2gui/issues) 🚀
 
 ---
 ## README ภาษาไทย
@@ -153,5 +153,5 @@ Root
 
 © 2025 **Phumsith Insakul**. All rights reserved.
 
-💬 **แจ้งปัญหาหรือเสนอแนะ:** [GitHub Issues](https://github.com/username/DynamicXMLTreeEditor/issues) 🚀
+💬 **แจ้งปัญหาหรือเสนอแนะ:** [GitHub Issues](https://github.com/PhumsitInsakul/xml2gui/issues) 🚀
 
