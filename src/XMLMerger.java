@@ -15,7 +15,7 @@
 /**
  * วิธีการใช้งาน:
  * 1. ใช้งานผ่านการรันโค้ดโดยตรง (เลือก Path สำหรับ XML Structure, XML to Merge และ Save Path)
- * 2. ใช้งานผ่าน GUI (บรรทัด 130)
+ * 2. ใช้งานผ่าน GUI (บรรทัด 150)
  * 3. ใช้งานผ่าน Application (src/application/XMLMerger.exe)
  */
 
@@ -127,7 +127,7 @@ public class XMLMerger {
         Transformer transformer = transformerFactory.newTransformer();
         transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
 
-        String outputFileName = "C:\\Installer\\XMLToMerge\\FinishedAllFiles\\Mock_Result_testdataXML_SIT_HashMap\\" /* + "Merged_" */ + sourceFileName;
+        String outputFileName = "C:\\Installer\\XMLToMerge\\FinishedAllFiles\\Result_testdataXML_SIT\\" /* + "Merged_" */ + sourceFileName;
         StreamResult result = new StreamResult(new File(outputFileName));
 
         DOMSource domSource = new DOMSource(resultDoc);
@@ -515,7 +515,6 @@ public class XMLMerger {
      * @param parentNode โหนดต้นทางที่ต้องการสร้างแผนที่โหนดลูก
      * @return แผนที่ (Map) ที่จับคู่ tagName กับ List ของโหนดลูกที่มีชื่อแท็กเดียวกัน
      */
-
     private static Map<String, List<Node>> buildNodeMap(Node parentNode) {
         Map<String, List<Node>> nodeMap = new HashMap<>();
         NodeList children = parentNode.getChildNodes();
@@ -532,205 +531,205 @@ public class XMLMerger {
     }
 
     /**
-         * check special duplicate fields (Unbound แต่ไม่มี Subfield)
-         *
-         * @param tagName
-         * @return
-         */
-        private static boolean isSpecialDuplicateFields(String tagName) {
-            List<String> specialDuplicateFields = Arrays.asList(
-                    "ProjectNameSoftLoans", "ExistingGuaranteeCollateralDetails", "creditLineFees",
-                    "feeContractReference", "SpecificDebtInContract", "RemarkForAdditionalDocument"
-            );
-            return specialDuplicateFields.contains(tagName);
-        }
+     * check special duplicate fields (Unbound แต่ไม่มี Subfield)
+     *
+     * @param tagName
+     * @return
+     */
+    private static boolean isSpecialDuplicateFields(String tagName) {
+        List<String> specialDuplicateFields = Arrays.asList(
+                "ProjectNameSoftLoans", "ExistingGuaranteeCollateralDetails", "creditLineFees",
+                "feeContractReference", "SpecificDebtInContract", "RemarkForAdditionalDocument"
+        );
+        return specialDuplicateFields.contains(tagName);
+    }
 
-        /**
-         * remove special duplicate nodes contains:
-         * "ProjectNameSoftLoans", "ExistingGuaranteeCollateralDetails", "creditLineFees",
-         * "feeContractReference", "SpecificDebtInContract", "RemarkForAdditionalDocument"
-         *
-         * @param parentNode
-         * @param tagName
-         */
-        public static void removeSpecialDuplicateNodes(Node parentNode, String tagName) {
-            // สร้าง List เพื่อเก็บค่าที่ได้จาก <ProjectNameSoftLoans> และอีก 5 Fields
-            Set<String> uniqueValues = new HashSet<>();
+    /**
+     * remove special duplicate nodes contains:
+     * "ProjectNameSoftLoans", "ExistingGuaranteeCollateralDetails", "creditLineFees",
+     * "feeContractReference", "SpecificDebtInContract", "RemarkForAdditionalDocument"
+     *
+     * @param parentNode
+     * @param tagName
+     */
+    public static void removeSpecialDuplicateNodes(Node parentNode, String tagName) {
+        // สร้าง List เพื่อเก็บค่าที่ได้จาก <ProjectNameSoftLoans> และอีก 5 Fields
+        Set<String> uniqueValues = new HashSet<>();
 
-            // รับทั้งหมดของลูกใน parentNode
-            NodeList nodeList = parentNode.getChildNodes();
+        // รับทั้งหมดของลูกใน parentNode
+        NodeList nodeList = parentNode.getChildNodes();
 
-            // ใช้ลูปเพื่อเช็คทุกโหนดใน parentNode
-            for (int i = 0; i < nodeList.getLength(); i++) {
-                Node node = nodeList.item(i);
+        // ใช้ลูปเพื่อเช็คทุกโหนดใน parentNode
+        for (int i = 0; i < nodeList.getLength(); i++) {
+            Node node = nodeList.item(i);
 
-                // ตรวจสอบว่าเป็นประเภทโหนด Element และตรงกับ tagName ที่ต้องการ
-                if (node.getNodeType() == Node.ELEMENT_NODE && node.getNodeName().equals(tagName)) {
-                    // ดึงค่าของ Text content ของโหนด
-                    String nodeValue = node.getTextContent().trim();
+            // ตรวจสอบว่าเป็นประเภทโหนด Element และตรงกับ tagName ที่ต้องการ
+            if (node.getNodeType() == Node.ELEMENT_NODE && node.getNodeName().equals(tagName)) {
+                // ดึงค่าของ Text content ของโหนด
+                String nodeValue = node.getTextContent().trim();
 
-                    // ถ้าค่ามีอยู่แล้วใน Set ก็ให้ลบโหนดนี้ออก
-                    if (uniqueValues.contains(nodeValue)) {
-                        parentNode.removeChild(node);
-                        i--; // ลดลูปเพื่อให้ไม่ข้ามโหนดถัดไป
-                    } else {
-                        // ถ้าเป็นค่าที่ไม่ซ้ำกัน ก็เพิ่มค่าเข้าไปใน Set
-                        uniqueValues.add(nodeValue);
-                    }
+                // ถ้าค่ามีอยู่แล้วใน Set ก็ให้ลบโหนดนี้ออก
+                if (uniqueValues.contains(nodeValue)) {
+                    parentNode.removeChild(node);
+                    i--; // ลดลูปเพื่อให้ไม่ข้ามโหนดถัดไป
+                } else {
+                    // ถ้าเป็นค่าที่ไม่ซ้ำกัน ก็เพิ่มค่าเข้าไปใน Set
+                    uniqueValues.add(nodeValue);
                 }
             }
-        }
-
-        /**
-         * remove duplicated nodes (เช็ค isNodeEmpty ไหม จากนั้นค่อยลบ Node ต้นฉบับ)
-         *
-         * @param parent
-         * @param tagName
-         */
-        private static void removeDuplicateNodes(Node parent, String tagName) {
-            NodeList children = parent.getChildNodes();
-            for (int i = 0; i < children.getLength(); i++) {
-                Node child = children.item(i);
-
-                if (child.getNodeType() == Node.ELEMENT_NODE && child.getNodeName().equals(tagName)) {
-                    // ตรวจสอบว่าโหนดว่างเปล่าหรือซ้ำซ้อน
-                    if (isNodeEmpty(child)) {
-                        parent.removeChild(child);
-                        i--; // ปรับ index หลังจากลบ
-                    }
-                }
-            }
-        }
-
-        /**
-         * check if node is empty or not (กรณีนี้เช็คเพื่อที่จะลบ Duplicated Nodes ต้นฉบับ)
-         *
-         * @param node
-         * @return
-         */
-
-        private static boolean isNodeEmpty(Node node) {
-            NodeList children = node.getChildNodes();
-            for (int i = 0; i < children.getLength(); i++) {
-                Node child = children.item(i);
-
-                if (child.getNodeType() == Node.ELEMENT_NODE && !child.getTextContent().trim().isEmpty()) {
-                    return false; // โหนดมีข้อมูล
-                }
-            }
-            return true; // โหนดว่าง
-        }
-
-        /**
-         * ฟังก์ชัน Duplicate Field
-         *
-         * @param cleanDoc
-         * @param cleanNode
-         * @param tagName
-         * @param count
-         */
-        private static void duplicateField(Document cleanDoc, Node cleanNode, String tagName, int count) {
-            Node templateNode = findChildNode(cleanNode, tagName);
-
-            if (templateNode != null) {
-                for (int i = 0; i < count; i++) {
-                    Node duplicateNode = cleanDoc.importNode(templateNode, true);
-                    cleanNode.appendChild(duplicateNode);
-                }
-            }
-        }
-
-        /**
-         * ฟังก์ชันเติมข้อมูลใน Field ที่ Duplicate
-         *
-         * @param cleanDoc
-         * @param cleanNode
-         * @param sourceNode
-         * @param tagName
-         */
-        private static void mergeDuplicateFields(Document cleanDoc, Node cleanNode, Node sourceNode, String tagName) {
-            NodeList cleanChildren = cleanNode.getChildNodes();
-            NodeList sourceChildren = sourceNode.getChildNodes();
-
-            int cleanIndex = 0;
-
-            for (int i = 0; i < sourceChildren.getLength(); i++) {
-                Node sourceChild = sourceChildren.item(i);
-
-                if (sourceChild.getNodeType() == Node.ELEMENT_NODE && sourceChild.getNodeName().equals(tagName)) {
-                    while (cleanIndex < cleanChildren.getLength()) {
-                        Node cleanChild = cleanChildren.item(cleanIndex);
-
-                        if (cleanChild.getNodeType() == Node.ELEMENT_NODE && cleanChild.getNodeName().equals(tagName)) {
-                            mergeNodes(cleanDoc, cleanChild, sourceChild);
-                            cleanIndex++;
-                            break;
-                        }
-                        cleanIndex++;
-                    }
-                }
-            }
-        }
-
-        /**
-         * ฟังก์ชันตรวจสอบจำนวน Field ที่มีข้อมูล
-         *
-         * @param parent
-         * @param tagName
-         * @return
-         */
-        private static int countChildrenWithData(Node parent, String tagName) {
-            NodeList children = parent.getChildNodes();
-            int count = 0;
-
-            for (int i = 0; i < children.getLength(); i++) {
-                Node child = children.item(i);
-
-                if (child.getNodeName().equals(tagName) && hasNonEmptyChild(child)) {
-                    count++;
-                }
-            }
-            return count;
-        }
-
-        /**
-         * ฟังก์ชันตรวจสอบว่ามีข้อมูลใน Node หรือไม่
-         *
-         * @param node
-         * @return
-         */
-        private static boolean hasNonEmptyChild(Node node) {
-            NodeList children = node.getChildNodes();
-
-            for (int i = 0; i < children.getLength(); i++) {
-                Node child = children.item(i);
-                if (child.getNodeType() == Node.ELEMENT_NODE) {
-                    if (!child.getTextContent().trim().isEmpty() || hasNonEmptyChild(child)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        /**
-         * ฟังก์ชันค้นหา Node ตามชื่อ
-         *
-         * @param parent
-         * @param tagName
-         * @return
-         */
-        private static Node findChildNode(Node parent, String tagName) {
-            NodeList children = parent.getChildNodes();
-            for (int i = 0; i < children.getLength(); i++) {
-                Node child = children.item(i);
-                if (child.getNodeName().equals(tagName)) {
-                    return child;
-                }
-            }
-            return null;
         }
     }
+
+    /**
+     * remove duplicated nodes (เช็ค isNodeEmpty ไหม จากนั้นค่อยลบ Node ต้นฉบับ)
+     *
+     * @param parent
+     * @param tagName
+     */
+    private static void removeDuplicateNodes(Node parent, String tagName) {
+        NodeList children = parent.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+
+            if (child.getNodeType() == Node.ELEMENT_NODE && child.getNodeName().equals(tagName)) {
+                // ตรวจสอบว่าโหนดว่างเปล่าหรือซ้ำซ้อน
+                if (isNodeEmpty(child)) {
+                    parent.removeChild(child);
+                    i--; // ปรับ index หลังจากลบ
+                }
+            }
+        }
+    }
+
+    /**
+     * check if node is empty or not (กรณีนี้เช็คเพื่อที่จะลบ Duplicated Nodes ต้นฉบับ)
+     *
+     * @param node
+     * @return
+     */
+
+    private static boolean isNodeEmpty(Node node) {
+        NodeList children = node.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+
+            if (child.getNodeType() == Node.ELEMENT_NODE && !child.getTextContent().trim().isEmpty()) {
+                return false; // โหนดมีข้อมูล
+            }
+        }
+        return true; // โหนดว่าง
+    }
+
+    /**
+     * ฟังก์ชัน Duplicate Field
+     *
+     * @param cleanDoc
+     * @param cleanNode
+     * @param tagName
+     * @param count
+     */
+    private static void duplicateField(Document cleanDoc, Node cleanNode, String tagName, int count) {
+        Node templateNode = findChildNode(cleanNode, tagName);
+
+        if (templateNode != null) {
+            for (int i = 0; i < count; i++) {
+                Node duplicateNode = cleanDoc.importNode(templateNode, true);
+                cleanNode.appendChild(duplicateNode);
+            }
+        }
+    }
+
+    /**
+     * ฟังก์ชันเติมข้อมูลใน Field ที่ Duplicate
+     *
+     * @param cleanDoc
+     * @param cleanNode
+     * @param sourceNode
+     * @param tagName
+     */
+    private static void mergeDuplicateFields(Document cleanDoc, Node cleanNode, Node sourceNode, String tagName) {
+        NodeList cleanChildren = cleanNode.getChildNodes();
+        NodeList sourceChildren = sourceNode.getChildNodes();
+
+        int cleanIndex = 0;
+
+        for (int i = 0; i < sourceChildren.getLength(); i++) {
+            Node sourceChild = sourceChildren.item(i);
+
+            if (sourceChild.getNodeType() == Node.ELEMENT_NODE && sourceChild.getNodeName().equals(tagName)) {
+                while (cleanIndex < cleanChildren.getLength()) {
+                    Node cleanChild = cleanChildren.item(cleanIndex);
+
+                    if (cleanChild.getNodeType() == Node.ELEMENT_NODE && cleanChild.getNodeName().equals(tagName)) {
+                        mergeNodes(cleanDoc, cleanChild, sourceChild);
+                        cleanIndex++;
+                        break;
+                    }
+                    cleanIndex++;
+                }
+            }
+        }
+    }
+
+    /**
+     * ฟังก์ชันตรวจสอบจำนวน Field ที่มีข้อมูล
+     *
+     * @param parent
+     * @param tagName
+     * @return
+     */
+    private static int countChildrenWithData(Node parent, String tagName) {
+        NodeList children = parent.getChildNodes();
+        int count = 0;
+
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+
+            if (child.getNodeName().equals(tagName) && hasNonEmptyChild(child)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * ฟังก์ชันตรวจสอบว่ามีข้อมูลใน Node หรือไม่
+     *
+     * @param node
+     * @return
+     */
+    private static boolean hasNonEmptyChild(Node node) {
+        NodeList children = node.getChildNodes();
+
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                if (!child.getTextContent().trim().isEmpty() || hasNonEmptyChild(child)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * ฟังก์ชันค้นหา Node ตามชื่อ
+     *
+     * @param parent
+     * @param tagName
+     * @return
+     */
+    private static Node findChildNode(Node parent, String tagName) {
+        NodeList children = parent.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeName().equals(tagName)) {
+                return child;
+            }
+        }
+        return null;
+    }
+}
 
 
 
